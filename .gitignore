@@ -2,5 +2,6 @@
 *.txt
 
 # 过滤code文件
+./code
 ./code/*
 
