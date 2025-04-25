@@ -68,29 +68,7 @@ else
 fi
 
 # 检测操作系统并设置下载和解压工具
-OS_TYPE=$(uname -s)
-case "$OS_TYPE" in
-  Linux*)
-    ARCHIVE_TYPE="tar.gz"
-    if ! command -v tar &> /dev/null; then
-      echo "Error: tar is not installed. Please install tar."
-      exit 1
-    fi
-    EXTRACT_CMD="tar -xzf"
-    ;;
-  MINGW*|MSYS*|CYGWIN*)
-    ARCHIVE_TYPE="zip"
-    if ! command -v unzip &> /dev/null; then
-      echo "Error: unzip is not installed. Please install unzip (e.g., via Git Bash or WSL)."
-      exit 1
-    fi
-    EXTRACT_CMD="unzip -o"
-    ;;
-  *)
-    echo "Error: Unsupported operating system: $OS_TYPE"
-    exit 1
-    ;;
-esac
+ARCHIVE_TYPE="tar.gz"
 
 
 # 创建本地目录（如果不存在）
@@ -101,12 +79,19 @@ API_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
 echo "Fetching latest release from $API_URL..."
 
 # 获取最新 release 的 tarball URL 和版本号
-RELEASE_INFO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" "$API_URL" 2>/tmp/curl_error.log)
+RELEASE_INFO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" "$API_URL" )
 if [ $? -ne 0 ]; then
   echo "Error: Failed to fetch release info. Check curl error:"
-  cat /tmp/curl_error.log
   exit 1
 fi
+
+# echo "RELEASE_INFO: $RELEASE_INFO"
+ASSETS_URL=$(echo "$RELEASE_INFO" | powershell -Command '
+  $json = [Console]::In.ReadToEnd() | ConvertFrom-Json;
+  $json.assets[0].url
+')
+echo "ASSETS_URL:$ASSETS_URL"
+
 
 # 检查 API 响应是否包含错误
 if echo "$RELEASE_INFO" | grep -q '"message":'; then
@@ -117,23 +102,14 @@ if echo "$RELEASE_INFO" | grep -q '"message":'; then
   exit 1
 fi
 
-TAR_URL=$(echo "$RELEASE_INFO" | grep '"tarball_url":' | sed -E 's/.*"tarball_url": "([^"]+)".*/\1/' | head -n 1)
+# 最新版本标签
 TAG_NAME=$(echo "$RELEASE_INFO" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | head -n 1)
 
-if [ -z "$TAR_URL" ] || [ -z "$TAG_NAME" ]; then
-  echo "Error: Unable to fetch latest release or tarball URL. Check your token, repository, or network."
-  echo "Raw API response:"
-  echo "$RELEASE_INFO"
-  exit 1
-fi
 
-echo "Latest release found: $TAG_NAME"
-echo "Tarball URL: $TAR_URL"
-
-
-# 下载URL
-DOWNLOAD_URL=$(echo "$RELEASE_INFO" | grep '"tarball_url":' | sed -E 's/.*"tarball_url": "([^"]+)".*/\1/' | head -n 1)
-TAG_NAME=$(echo "$RELEASE_INFO" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | head -n 1)
+# 尝试从 assets 中查找 .tar.gz 文件，优先选择包含 "release" 的文件
+DOWNLOAD_URL=$(echo "$RELEASE_INFO" | grep -A 1 '.*\.tar\.gz"' | grep '"browser_download_url":' | sed -E 's/.*"browser_download_url": "([^"]+)".*/\1/' | grep -i "release" | head -n 1)
+echo "初始查找DOWNLOAD_URL: $DOWNLOAD_URL"
+echo "初始查找ARCHIVE_NAME: $ARCHIVE_NAME"
 
 if [ -z "$DOWNLOAD_URL" ] || [ -z "$TAG_NAME" ]; then
   echo "Error: Unable to fetch latest release or tarball URL. Check your token, repository, or network."
@@ -142,18 +118,17 @@ if [ -z "$DOWNLOAD_URL" ] || [ -z "$TAG_NAME" ]; then
   exit 1
 fi
 
-ARCHIVE_TYPE="tar.gz"
-ARCHIVE_NAME="release-$TAG_NAME.tar.gz"
-
 echo "Latest release found: $TAG_NAME"
 echo "Downloading $ARCHIVE_TYPE file: $ARCHIVE_NAME"
-echo "Download URL: $DOWNLOAD_URL"
 
 
 # 下载文件
-TEMP_ARCHIVE="$ARCHIVE_NAME"
+TEMP_ARCHIVE="$REPO_NAME-$TAG_NAME.$ARCHIVE_TYPE"
+
+# 从ASSETS_URL下载文件
+echo "Download URL: $DOWNLOAD_URL"
 echo "Downloading $ARCHIVE_TYPE to $TEMP_ARCHIVE..."
-curl -s -L -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$DOWNLOAD_URL" -o "$TEMP_ARCHIVE"  || { echo "Error: Failed to download $ARCHIVE_TYPE."; exit 1; }
+curl -s -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" "$ASSETS_URL" -o "$TEMP_ARCHIVE"
 if [ $? -ne 0 ]; then
   echo "Error: Failed to download $ARCHIVE_TYPE. Check curl error:"
   cat /tmp/curl_download_error.log
@@ -186,8 +161,8 @@ echo "Extracting $TEMP_ARCHIVE to $LOCAL_DIR..."
 tar -xzf "$TEMP_ARCHIVE" -C "$LOCAL_DIR" --strip-components=1 || { echo "Error: Failed to extract tarball."; exit 1; }
 
 
-# 删除临时文件
-rm -f "$TEMP_ARCHIVE" || echo "Warning: Failed to delete temporary file $TEMP_ARCHIVE."
+# # 删除临时文件
+# rm -f "$TEMP_ARCHIVE" || echo "Warning: Failed to delete temporary file $TEMP_ARCHIVE."
 
 # 进入本地代码目录并执行 npm install
 echo "Running npm install in $LOCAL_DIR..."
