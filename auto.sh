@@ -10,7 +10,8 @@ REPO_URL="https://github.com/NewByteChain/on-chain-inter.git"
 
 # 本地代码目录（默认脚本同级目录下的 repo 文件夹）
 LOCAL_DIR="$(dirname "$0")/code"
-
+REPO_OWNER="NewByteChain"                           # 替换为 GitHub 仓库所有者
+REPO_NAME="on-chain-inter"                          # 替换为 GitHub 仓库名称
 
 # 加载配置文件（如果存在）
 if [ -f "$CONFIG_FILE" ]; then
@@ -45,7 +46,7 @@ if [ ! -f "$GITHUB_TOKEN_FILE" ]; then
   echo "Created empty $GITHUB_TOKEN_FILE."
 else
   echo "Text file $GITHUB_TOKEN_FILE already exists."
-  GITHUB_TOKEN=$(cat "$TOKEN_FILE" | tr -d '\n\r')  # 读取并去除换行符
+  GITHUB_TOKEN=$(cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r')  # 读取并去除换行符
 fi
 
 # 检查并创建 PRIVATE_KEY_FILE 文件
@@ -66,39 +67,135 @@ else
   echo "Text file $PROXIES_FILE already exists."
 fi
 
+# 检测操作系统并设置下载和解压工具
+OS_TYPE=$(uname -s)
+case "$OS_TYPE" in
+  Linux*)
+    ARCHIVE_TYPE="tar.gz"
+    if ! command -v tar &> /dev/null; then
+      echo "Error: tar is not installed. Please install tar."
+      exit 1
+    fi
+    EXTRACT_CMD="tar -xzf"
+    ;;
+  MINGW*|MSYS*|CYGWIN*)
+    ARCHIVE_TYPE="zip"
+    if ! command -v unzip &> /dev/null; then
+      echo "Error: unzip is not installed. Please install unzip (e.g., via Git Bash or WSL)."
+      exit 1
+    fi
+    EXTRACT_CMD="unzip -o"
+    ;;
+  *)
+    echo "Error: Unsupported operating system: $OS_TYPE"
+    exit 1
+    ;;
+esac
+
 
 # 创建本地目录（如果不存在）
 mkdir -p "$LOCAL_DIR"
 
-# 转换为 HTTPS URL 并嵌入 token
-AUTH_REPO_URL=$(echo "$REPO_URL" | sed "s|https://|https://$GITHUB_TOKEN@|")
+# 使用 GitHub API 获取最新 release 信息
+API_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
+echo "Fetching latest release from $API_URL..."
 
-# 获取最新的 tag
-LATEST_TAG=$(git ls-remote --tags "$AUTH_REPO_URL" | grep -v "{}" | awk '{print $2}' | grep -v "\^{}$" | sort -V | tail -n 1 | sed 's|refs/tags/||')
-
-if [ -z "$LATEST_TAG" ]; then
-  echo "Error: Unable to fetch the latest tag. Check your token or repository URL."
+# 获取最新 release 的 tarball URL 和版本号
+RELEASE_INFO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" "$API_URL" 2>/tmp/curl_error.log)
+if [ $? -ne 0 ]; then
+  echo "Error: Failed to fetch release info. Check curl error:"
+  cat /tmp/curl_error.log
   exit 1
 fi
 
-echo "Latest tag found: $LATEST_TAG"
-
-
-# 检查本地目录是否已经是一个 git 仓库
-if [ -d "$LOCAL_DIR/.git" ]; then
-  echo "Local directory is a git repository. Updating to tag $LATEST_TAG..."
-  cd "$LOCAL_DIR" || exit 1
-  git fetch --tags "$AUTH_REPO_URL" || { echo "Error: Failed to fetch tags."; exit 1; }
-  git checkout "$LATEST_TAG" || { echo "Error: Failed to checkout tag $LATEST_TAG."; exit 1; }
-  git pull "$AUTH_REPO_URL" "$LATEST_TAG" || { echo "Error: Failed to pull tag $LATEST_TAG."; exit 1; }
-else
-  echo "Cloning repository with tag $LATEST_TAG to $LOCAL_DIR..."
-  git clone --branch "$LATEST_TAG" "$AUTH_REPO_URL" "$LOCAL_DIR" || { echo "Error: Failed to clone repository."; exit 1; }
+# 检查 API 响应是否包含错误
+if echo "$RELEASE_INFO" | grep -q '"message":'; then
+  ERROR_MESSAGE=$(echo "$RELEASE_INFO" | grep '"message":' | sed -E 's/.*"message": "([^"]+)".*/\1/')
+  echo "Error: GitHub API returned an error: $ERROR_MESSAGE"
+  echo "Raw API response:"
+  echo "$RELEASE_INFO"
+  exit 1
 fi
+
+TAR_URL=$(echo "$RELEASE_INFO" | grep '"tarball_url":' | sed -E 's/.*"tarball_url": "([^"]+)".*/\1/' | head -n 1)
+TAG_NAME=$(echo "$RELEASE_INFO" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | head -n 1)
+
+if [ -z "$TAR_URL" ] || [ -z "$TAG_NAME" ]; then
+  echo "Error: Unable to fetch latest release or tarball URL. Check your token, repository, or network."
+  echo "Raw API response:"
+  echo "$RELEASE_INFO"
+  exit 1
+fi
+
+echo "Latest release found: $TAG_NAME"
+echo "Tarball URL: $TAR_URL"
+
+
+# 下载URL
+DOWNLOAD_URL=$(echo "$RELEASE_INFO" | grep '"tarball_url":' | sed -E 's/.*"tarball_url": "([^"]+)".*/\1/' | head -n 1)
+TAG_NAME=$(echo "$RELEASE_INFO" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | head -n 1)
+
+if [ -z "$DOWNLOAD_URL" ] || [ -z "$TAG_NAME" ]; then
+  echo "Error: Unable to fetch latest release or tarball URL. Check your token, repository, or network."
+  echo "Raw API response:"
+  echo "$RELEASE_INFO"
+  exit 1
+fi
+
+ARCHIVE_TYPE="tar.gz"
+ARCHIVE_NAME="release-$TAG_NAME.tar.gz"
+
+echo "Latest release found: $TAG_NAME"
+echo "Downloading $ARCHIVE_TYPE file: $ARCHIVE_NAME"
+echo "Download URL: $DOWNLOAD_URL"
+
+
+# 下载文件
+TEMP_ARCHIVE="$ARCHIVE_NAME"
+echo "Downloading $ARCHIVE_TYPE to $TEMP_ARCHIVE..."
+curl -s -L -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$DOWNLOAD_URL" -o "$TEMP_ARCHIVE"  || { echo "Error: Failed to download $ARCHIVE_TYPE."; exit 1; }
+if [ $? -ne 0 ]; then
+  echo "Error: Failed to download $ARCHIVE_TYPE. Check curl error:"
+  cat /tmp/curl_download_error.log
+  exit 1
+fi
+
+# 验证下载的文件是否存在且不为空
+if [ ! -s "$TEMP_ARCHIVE" ]; then
+  echo "Error: Downloaded file $TEMP_ARCHIVE is empty or does not exist."
+  exit 1
+fi
+
+# 验证文件类型
+echo "Verifying file type of $TEMP_ARCHIVE..."
+FILE_TYPE=$(file "$TEMP_ARCHIVE")
+if ! echo "$FILE_TYPE" | grep -q "gzip compressed data"; then
+  echo "Error: $TEMP_ARCHIVE is not a valid tar.gz file. File type: $FILE_TYPE"
+  echo "First 10 lines of file:"
+  head -n 10 "$TEMP_ARCHIVE"
+  exit 1
+fi
+
+
+# 清空目标目录（避免残留文件）
+echo "Clearing target directory $LOCAL_DIR..."
+rm -rf "$LOCAL_DIR"/* || { echo "Error: Failed to clear $LOCAL_DIR."; exit 1; }
+
+# 解压文件到目标目录
+echo "Extracting $TEMP_ARCHIVE to $LOCAL_DIR..."
+tar -xzf "$TEMP_ARCHIVE" -C "$LOCAL_DIR" --strip-components=1 || { echo "Error: Failed to extract tarball."; exit 1; }
+
+
+# 删除临时文件
+rm -f "$TEMP_ARCHIVE" || echo "Warning: Failed to delete temporary file $TEMP_ARCHIVE."
 
 # 进入本地代码目录并执行 npm install
 echo "Running npm install in $LOCAL_DIR..."
 cd "$LOCAL_DIR" || exit 1
-npm install || { echo "Error: Failed to run npm install."; exit 1; }
-
-echo "Successfully updated to tag $LATEST_TAG and installed npm dependencies in $LOCAL_DIR."
+if [ -f "package.json" ]; then
+  npm install || { echo "Error: Failed to run npm install."; exit 1; }
+else
+  echo "Warning: No package.json found in $LOCAL_DIR. Skipping npm install."
+fi
+  
+echo "Successfully downloaded and extracted release $TAG_NAME ($ARCHIVE_NAME) to $LOCAL_DIR."
