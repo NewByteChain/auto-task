@@ -161,8 +161,8 @@ echo "Extracting $TEMP_ARCHIVE to $LOCAL_DIR..."
 tar -xzf "$TEMP_ARCHIVE" -C "$LOCAL_DIR" --strip-components=1 || { echo "Error: Failed to extract tarball."; exit 1; }
 
 
-# # 删除临时文件
-# rm -f "$TEMP_ARCHIVE" || echo "Warning: Failed to delete temporary file $TEMP_ARCHIVE."
+# 删除临时文件
+rm -f "$TEMP_ARCHIVE" || echo "Warning: Failed to delete temporary file $TEMP_ARCHIVE."
 
 # 进入本地代码目录并执行 npm install
 echo "Running npm install in $LOCAL_DIR..."
