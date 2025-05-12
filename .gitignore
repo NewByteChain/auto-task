@@ -3,8 +3,9 @@
 
 # 过滤code文件
 code
-code/
 code/*
+code_py
+code_py/*
 
 # 过滤gz
 *.zip
