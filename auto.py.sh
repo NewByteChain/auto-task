@@ -152,9 +152,9 @@ if ! echo "$FILE_TYPE" | grep -q "gzip compressed data"; then
 fi
 
 
-# 清空目标目录（避免残留文件）
-echo "Clearing target directory $LOCAL_DIR..."
-rm -rf "$LOCAL_DIR"/* || { echo "Error: Failed to clear $LOCAL_DIR."; exit 1; }
+# # 清空目标目录（避免残留文件）
+# echo "Clearing target directory $LOCAL_DIR..."
+# rm -rf "$LOCAL_DIR"/* || { echo "Error: Failed to clear $LOCAL_DIR."; exit 1; }
 
 # 解压文件到目标目录
 echo "Extracting $TEMP_ARCHIVE to $LOCAL_DIR..."
