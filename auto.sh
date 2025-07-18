@@ -6,10 +6,14 @@ directories=(
     "./code/data/task"
     "./code/data/logs"
 )
+# 定义需要检查和创建的文件数组
+files=(
+    "./github_token.txt" # 存储 GITHUB_TOKEN 的 txt 文件
+    "./proxies.txt"
+    "./private_keys.txt"
+)
 # 配置文件路径（相对于脚本位置）
 GITHUB_TOKEN_FILE="$(dirname "$0")/github_token.txt" # 存储 GITHUB_TOKEN 的 txt 文件
-PROXIES_FILE="$(dirname "$0")/proxies.txt"  # 指定要检查/创建的 txt 文件名
-PRIVATE_KEY_FILE="$(dirname "$0")/private_keys.txt"  # 指定要检查/创建的 txt 文件名
 
 # GitHub 仓库地址
 REPO_URL="https://github.com/NewByteChain/on-chain-inter.git"
@@ -31,13 +35,13 @@ for dir in "${directories[@]}"; do
     fi
 done
 
-# 加载配置文件（如果存在）
-if [ -f "$CONFIG_FILE" ]; then
-  source "$CONFIG_FILE"
-else
-  echo "Config file not found at $CONFIG_FILE. Using default settings."
-  echo "Please create $CONFIG_FILE with REPO_URL, LOCAL_DIR, and GITHUB_TOKEN."
-fi
+# # 加载配置文件（如果存在）
+# if [ -f "$CONFIG_FILE" ]; then
+#   source "$CONFIG_FILE"
+# else
+#   echo "Config file not found at $CONFIG_FILE. Using default settings."
+#   echo "Please create $CONFIG_FILE with REPO_URL, LOCAL_DIR, and GITHUB_TOKEN."
+# fi
 
 
 if [ -z "$REPO_URL" ]; then
@@ -67,23 +71,6 @@ else
   GITHUB_TOKEN=$(cat "$GITHUB_TOKEN_FILE" | tr -d '\n\r')  # 读取并去除换行符
 fi
 
-# 检查并创建 PRIVATE_KEY_FILE 文件
-if [ ! -f "$PRIVATE_KEY_FILE" ]; then
-  echo "Text file $PRIVATE_KEY_FILE does not exist. Creating an empty file..."
-  touch "$PRIVATE_KEY_FILE" || { echo "Error: Failed to create $PRIVATE_KEY_FILE."; exit 1; }
-  echo "Created empty $PRIVATE_KEY_FILE."
-else
-  echo "Text file $PRIVATE_KEY_FILE already exists."
-fi
-
-# 检查并创建 proxies 文件
-if [ ! -f "$PROXIES_FILE" ]; then
-  echo "Text file $PROXIES_FILE does not exist. Creating an empty file..."
-  touch "$PROXIES_FILE" || { echo "Error: Failed to create $PROXIES_FILE."; exit 1; }
-  echo "Created empty $PROXIES_FILE."
-else
-  echo "Text file $PROXIES_FILE already exists."
-fi
 
 # 检测操作系统并设置下载和解压工具
 ARCHIVE_TYPE="tar.gz"
