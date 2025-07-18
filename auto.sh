@@ -1,5 +1,11 @@
 #!/bin/bash
-
+# 定义需要创建的目录数组
+directories=(
+    "./code"
+    "./code/data"
+    "./code/data/task"
+    "./code/data/logs"
+)
 # 配置文件路径（相对于脚本位置）
 GITHUB_TOKEN_FILE="$(dirname "$0")/github_token.txt" # 存储 GITHUB_TOKEN 的 txt 文件
 PROXIES_FILE="$(dirname "$0")/proxies.txt"  # 指定要检查/创建的 txt 文件名
@@ -12,6 +18,18 @@ REPO_URL="https://github.com/NewByteChain/on-chain-inter.git"
 LOCAL_DIR="$(dirname "$0")/code"
 REPO_OWNER="NewByteChain"                           # 替换为 GitHub 仓库所有者
 REPO_NAME="on-chain-inter"                          # 替换为 GitHub 仓库名称
+
+# 目录检查，遍历目录数组如果没有则进行创建目录操作
+for dir in "${directories[@]}"; do
+    # 检查目录是否存在
+    if [ ! -d "$dir" ]; then
+        # 如果不存在则创建目录
+        mkdir -p "$dir"
+        echo "Created directory: $dir"
+    else
+        echo "Directory already exists: $dir"
+    fi
+done
 
 # 加载配置文件（如果存在）
 if [ -f "$CONFIG_FILE" ]; then
