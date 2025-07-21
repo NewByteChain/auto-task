@@ -11,6 +11,7 @@ files=(
     "./github_token.txt" # 存储 GITHUB_TOKEN 的 txt 文件
     "./proxies.txt"
     "./private_keys.txt"
+    "./code/data/adspower.txt"
 )
 # 配置文件路径（相对于脚本位置）
 GITHUB_TOKEN_FILE="$(dirname "$0")/github_token.txt" # 存储 GITHUB_TOKEN 的 txt 文件
@@ -32,6 +33,28 @@ for dir in "${directories[@]}"; do
         echo "Created directory: $dir"
     else
         echo "Directory already exists: $dir"
+    fi
+done
+
+
+# 文件检查，遍历文件数组
+for file in "${files[@]}"; do
+    # 检查文件是否存在
+    if [ ! -f "$file" ]; then
+        # 获取文件的目录路径
+        dir=$(dirname "$file")
+        
+        # 如果目录不存在，创建目录
+        if [ ! -d "$dir" ]; then
+            mkdir -p "$dir"
+            echo "Created directory: $dir"
+        fi
+        
+        # 创建空文件
+        touch "$file"
+        echo "Created file: $file"
+    else
+        echo "File already exists: $file"
     fi
 done
 
@@ -157,9 +180,9 @@ if ! echo "$FILE_TYPE" | grep -q "gzip compressed data"; then
 fi
 
 
-# 清空目标目录（避免残留文件）
-echo "Clearing target directory $LOCAL_DIR..."
-rm -rf "$LOCAL_DIR"/* || { echo "Error: Failed to clear $LOCAL_DIR."; exit 1; }
+## 清空目标目录（避免残留文件）
+#echo "Clearing target directory $LOCAL_DIR..."
+#rm -rf "$LOCAL_DIR"/* || { echo "Error: Failed to clear $LOCAL_DIR."; exit 1; }
 
 # 解压文件到目标目录
 echo "Extracting $TEMP_ARCHIVE to $LOCAL_DIR..."
